@@ -84,6 +84,7 @@ ui_print "- 已安装 kelexine 原生二进制 [$ABI]"
 
 chmod 755 "$MODPATH/common/sepolicy_live.sh" 2>/dev/null
 chmod 755 "$MODPATH/common/probe_gadget.sh" 2>/dev/null
+chmod 755 "$MODPATH/common/config.sh" "$MODPATH/common/ventoy.sh" 2>/dev/null
 
 mkdir -p /data/adb/isodriveplus/images /data/adb/isodriveplus/stage
 chmod 755 /data/adb/isodriveplus /data/adb/isodriveplus/images /data/adb/isodriveplus/stage

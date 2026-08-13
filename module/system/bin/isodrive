@@ -466,6 +466,7 @@ cmd_mount() {
     } > "$STATE_FILE"
     [ "$_rc" = "0" ] || die "kelexine isodrive failed (exit $_rc)"
     log "Mounted via kelexine binary"
+    echo "$_file $_extra" > /data/adb/isodriveplus/last.mount
     return 0
   fi
 
@@ -511,12 +512,55 @@ cmd_blank() {
   echo "$_out"
 }
 
+_load_cfg() {
+  [ -f /data/adb/modules/isodriveplus/common/config.sh ] && . /data/adb/modules/isodriveplus/common/config.sh
+  [ -f /data/adb/modules/isodriveplus/common/ventoy.sh ] && . /data/adb/modules/isodriveplus/common/ventoy.sh
+}
+
 cmd_list() {
-  echo "# images in $IMG_DIR and common folders"
-  for d in "$IMG_DIR" /data/media/0/Download /data/media/0/ISO /data/media/0/Download/ISO /sdcard/Download /sdcard/ISO; do
+  _load_cfg
+  echo "# scan paths (edit with: isodrive paths-add /your/dir)"
+  scan_paths_list | while read -r d; do
+    echo "# $d"
     [ -d "$d" ] || continue
-    find "$d" -maxdepth 2 -type f \( -iname '*.iso' -o -iname '*.img' -o -iname '*.bin' \) 2>/dev/null
-  done | sort -u
+    find "$d" -maxdepth 3 -type f \( -iname '*.iso' -o -iname '*.img' -o -iname '*.bin' \) 2>/dev/null
+  done
+}
+
+cmd_diag() {
+  echo "=== status ==="
+  cmd_status
+  echo "=== engine probe ==="
+  _bin="$(find_native 2>/dev/null)"
+  [ -n "$_bin" ] && "$_bin" probe
+  echo "=== lun ==="
+  for f in /config/usb_gadget/*/functions/mass_storage.isodp/lun.0/file \
+           /sys/kernel/config/usb_gadget/*/functions/mass_storage.isodp/lun.0/file; do
+    [ -e "$f" ] && echo "$f=$(tr -d '\n' < "$f")"
+  done
+  echo "=== avc (last 30) ==="
+  dmesg 2>/dev/null | grep -i 'avc:' | tail -30
+}
+
+cmd_paths() {
+  _load_cfg
+  case "$1" in
+    add) shift; scan_paths_add "$1"; scan_paths_list ;;
+    del|rm) shift; scan_paths_del "$1"; scan_paths_list ;;
+    *) echo "# custom scan paths ($SCAN_FILE)"; scan_paths_list ;;
+  esac
+}
+
+cmd_cfg() {
+  _load_cfg
+  case "$1" in
+    persist) cfg_set PERSIST_MOUNT "$2"; echo "PERSIST_MOUNT=$(cfg_get PERSIST_MOUNT 0)" ;;
+    autorestore) cfg_set AUTO_RESTORE "$2"; echo "AUTO_RESTORE=$(cfg_get AUTO_RESTORE 1)" ;;
+    *)
+      echo "PERSIST_MOUNT=$(cfg_get PERSIST_MOUNT 0)"
+      echo "AUTO_RESTORE=$(cfg_get AUTO_RESTORE 1)"
+      ;;
+  esac
 }
 
 cmd_status() {
@@ -537,8 +581,13 @@ ISODrive+  —  mount an ISO/IMG as a USB disk/CD-ROM (root)
   isodrive umount|restore     Unmount + restore USB
   isodrive probe              Kernel / gadget capability report
   isodrive status             Current mount
-  isodrive list               Find ISO/IMG files
-  isodrive blank <name> <MB>  Create sparse blank disk under /data/adb/isodriveplus/images
+  isodrive list                 Scan ISO/IMG (custom paths)
+  isodrive paths / paths-add P / paths-del P
+  isodrive ventoy-init [img] [GB]   Build Ventoy disk image (multi-ISO)
+  isodrive ventoy-add <img> <iso>   Copy ISO into Ventoy data partition
+  isodrive diag                     LUN + last AVC denials
+  isodrive cfg [persist 0|1] [autorestore 0|1]
+  isodrive blank <name> <MB>        Sparse raw disk (not UDF; prefer Ventoy)
 
 Options:
   -cdrom      CD-ROM LUN (needed for official Windows ISOs)
@@ -574,6 +623,13 @@ case "$1" in
   probe) cmd_probe ;;
   status) cmd_status ;;
   list) cmd_list ;;
+  diag) cmd_diag ;;
+  paths) shift; cmd_paths "$@" ;;
+  paths-add) shift; cmd_paths add "$@" ;;
+  paths-del) shift; cmd_paths del "$@" ;;
+  cfg|config) shift; cmd_cfg "$@" ;;
+  ventoy-init) _load_cfg; shift; ventoy_init "$@" ;;
+  ventoy-add) _load_cfg; shift; ventoy_add "$@" ;;
   blank) shift; cmd_blank "$@" ;;
   umount|unmount|restore) restore_usb ;;
   *) cmd_mount "$@" ;;

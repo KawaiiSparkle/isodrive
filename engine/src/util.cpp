@@ -11,6 +11,7 @@
 #include <iostream>
 #include <mntent.h>
 #include <string>
+#include <string_view>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -245,12 +246,37 @@ static bool search_iso_for_bootloader(std::ifstream& file, bool& has_uefi, bool&
   return true;
 }
 
-bool is_windows_iso(const std::string& path) {
-  std::string volume_label = read_iso_volume_label(path);
-  if (volume_label.empty()) {
-    return false;
+static bool scan_iso_for_windows_files(const std::string& path, bool& saw_wim, bool& saw_bootmgr, bool& saw_efi) {
+  saw_wim = saw_bootmgr = saw_efi = false;
+  std::ifstream file(path, std::ios::binary);
+  if (!file) return false;
+  // Walk the first ~8 MiB of ISO9660 directory records as raw haystack.
+  const size_t CHUNK = 65536;
+  const size_t LIMIT = 8 * 1024 * 1024;
+  std::string buf(CHUNK, '\0');
+  size_t off = 0;
+  while (off < LIMIT && file) {
+    file.read(&buf[0], CHUNK);
+    std::streamsize n = file.gcount();
+    if (n <= 0) break;
+    std::string_view sv(buf.data(), static_cast<size_t>(n));
+    auto has = [&](const char* s) {
+      return sv.find(s) != std::string_view::npos;
+    };
+    if (has("INSTALL.WIM") || has("install.wim") || has("INSTALL.ESD") || has("install.esd"))
+      saw_wim = true;
+    if (has("BOOTMGR") || has("bootmgr"))
+      saw_bootmgr = true;
+    if (has("BOOTX64.EFI") || has("bootx64.efi") || has("EFI\\BOOT") || has("efi/boot"))
+      saw_efi = true;
+    if (saw_wim && saw_bootmgr) return true;
+    off += static_cast<size_t>(n);
   }
-  return iso_contains_windows_markers(volume_label);
+  return saw_wim || saw_bootmgr;
+}
+
+bool is_windows_iso(const std::string& path) {
+  return get_windows_iso_info(path).is_windows;
 }
 
 WindowsIsoInfo get_windows_iso_info(const std::string& path) {
@@ -260,18 +286,17 @@ WindowsIsoInfo get_windows_iso_info(const std::string& path) {
   info.has_uefi = false;
   info.has_legacy = false;
 
-  // Read volume label
   info.volume_label = read_iso_volume_label(path);
-  if (info.volume_label.empty()) {
-    log_debug("Could not read volume label from: " + path);
-    return info;
-  }
 
-  // Check if it's a Windows ISO
-  info.is_windows = iso_contains_windows_markers(info.volume_label);
+  bool saw_wim = false, saw_bootmgr = false, saw_efi = false;
+  scan_iso_for_windows_files(path, saw_wim, saw_bootmgr, saw_efi);
+
+  info.is_windows = iso_contains_windows_markers(info.volume_label) || saw_wim ||
+                    (saw_bootmgr && saw_efi);
   if (!info.is_windows) {
     return info;
   }
+  if (saw_efi) info.has_uefi = true;
 
   // Detect version
   info.version = detect_version_from_label(info.volume_label);
@@ -279,7 +304,10 @@ WindowsIsoInfo get_windows_iso_info(const std::string& path) {
   // Check for boot support
   std::ifstream file(path, std::ios::binary);
   if (file) {
-    search_iso_for_bootloader(file, info.has_uefi, info.has_legacy);
+    bool uefi = false, legacy = false;
+    search_iso_for_bootloader(file, uefi, legacy);
+    info.has_uefi = info.has_uefi || uefi || saw_efi;
+    info.has_legacy = info.has_legacy || legacy;
   }
 
   log_debug("Windows ISO detected: " + info.volume_label + 

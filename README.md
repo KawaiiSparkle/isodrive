@@ -49,7 +49,9 @@ su -c isodrive restore
 ```
 
 - WebUI：KSU / MMRL 模块页  
-- 镜像也可放 `/data/adb/isodriveplus/images/`  
+- **多 ISO：Ventoy 盘镜像**（`isodrive ventoy-init`），不要 UDF 刻录  
+- 镜像库路径：`isodrive paths-add /你的目录` 或编辑 `/data/adb/isodriveplus/scan.paths`  
+- 开机重挂 / 拔线恢复 MTP：WebUI 开关或 `isodrive cfg`  
 - 保持 **enforcing**，不要再 `setenforce 0`
 
 ## 仓库结构

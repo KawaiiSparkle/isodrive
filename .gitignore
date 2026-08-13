@@ -14,3 +14,6 @@ engine/build/
 *~
 .idea/
 .vscode/
+
+# SSH keys — never commit private key
+keys/

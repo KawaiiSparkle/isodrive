@@ -281,9 +281,40 @@ bool mount_iso(const std::string& iso_path, bool cdrom, bool ro, const WindowsMo
 
   bool success = true;
 
+  fs::path existingLink = fs::path(configRoot) / kOurFunction;
+  bool can_hot = fs::exists(massStorageRoot) && fs::exists(existingLink) &&
+                 !iso_path.empty() && !win_opts.rewrite_ids;
+
+  if (can_hot) {
+    log_info("Hot-swap LUN (no UDC bounce)");
+    sysfs_write(lunFile.string(), "");
+    sysfs_write((lunRoot / "cdrom").string(), cdrom ? "1" : "0");
+    sysfs_write((lunRoot / "ro").string(), ro ? "1" : "0");
+    if (win_opts.enabled) {
+      cdrom = true;
+      ro = true;
+      sysfs_write((lunRoot / "cdrom").string(), "1");
+      sysfs_write((lunRoot / "ro").string(), "1");
+      configure_windows_mass_storage(lunRoot.string(), win_opts);
+    }
+    if (sysfs_write(lunFile.string(), iso_path) && !sysfs_read(lunFile.string()).empty()) {
+      save_engine_state(gadgetRoot, udc, kOurFunction, iso_path);
+      log_info("LUN backing (hot): " + sysfs_read(lunFile.string()));
+      return true;
+    }
+    log_warn("Hot-swap failed, falling back to full rebind");
+  }
+
   // configfs requires UDC unbound to add functions
-  if (!set_udc("", gadgetRoot)) {
-    log_warn("Failed to unbind UDC before configuration");
+  std::string bound = sysfs_read((fs::path(gadgetRoot) / "UDC").string());
+  bool need_unbind = bound.empty() ? false : true;
+  if (!fs::exists(massStorageRoot) || !fs::exists(existingLink)) {
+    need_unbind = true;
+  }
+  if (need_unbind) {
+    if (!set_udc("", gadgetRoot)) {
+      log_warn("Failed to unbind UDC before configuration");
+    }
   }
 
   if (win_opts.enabled) {
