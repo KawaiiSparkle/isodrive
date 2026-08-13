@@ -49,7 +49,8 @@ su -c isodrive restore
 ```
 
 - WebUI：KSU / MMRL 模块页  
-- **多 ISO：Ventoy 盘镜像**（`isodrive ventoy-init`），不要 UDF 刻录  
+- **多 ISO：Ventoy 盘镜像**（`isodrive ventoy-init`）
+- **UDF/官方 Windows ISO**：`isodrive convert win.iso` → 单文件&lt;4GiB 用 FAT32，否则 exFAT（自研 UDF 解包 + FatFs，不直接把 UDF 挂给主机）  
 - 镜像库路径：`isodrive paths-add /你的目录` 或编辑 `/data/adb/isodriveplus/scan.paths`  
 - 开机重挂 / 拔线恢复 MTP：WebUI 开关或 `isodrive cfg`  
 - 保持 **enforcing**，不要再 `setenforce 0`
