@@ -1,0 +1,580 @@
+#!/system/bin/sh
+# ISODrive+ CLI — configfs + legacy android_usb sysfs
+# Compatible with Android 6+ toybox/mksh. Must run as root.
+
+export PATH="/data/adb/modules/isodriveplus/system/bin:/system/bin:/system/xbin:/sbin:/vendor/bin:$PATH"
+
+STATE_DIR="/data/adb/isodriveplus"
+STAGE_DIR="$STATE_DIR/stage"
+IMG_DIR="$STATE_DIR/images"
+STATE_FILE="$STATE_DIR/state"
+LOG_FILE="$STATE_DIR/isodrive.log"
+USB_SAVE="$STATE_DIR/usb.save"
+
+mkdir -p "$STATE_DIR" "$STAGE_DIR" "$IMG_DIR" 2>/dev/null
+
+log() { echo "[isodrive] $*" | tee -a "$LOG_FILE" 2>/dev/null; }
+err() { echo "[isodrive] ERROR: $*" | tee -a "$LOG_FILE" 2>/dev/null >&2; }
+
+die() { err "$*"; exit 1; }
+
+need_root() {
+  [ "$(id -u)" = "0" ] || die "Need root (su). Permission denied"
+}
+
+sys_write() {
+  # $1 path $2 value — no trailing issues; configfs hates extra junk
+  _p="$1"; _v="$2"
+  [ -e "$_p" ] || return 1
+  printf '%s' "$_v" > "$_p" 2>/dev/null
+}
+
+sys_read() {
+  [ -r "$1" ] || { echo ""; return 1; }
+  tr -d '\n' < "$1" 2>/dev/null
+}
+
+configfs_root() {
+  if [ -d /config/usb_gadget ]; then
+    echo /config
+    return 0
+  fi
+  if [ -d /sys/kernel/config/usb_gadget ]; then
+    echo /sys/kernel/config
+    return 0
+  fi
+  # try mount
+  if [ ! -d /sys/kernel/config ]; then
+    mkdir -p /sys/kernel/config 2>/dev/null
+  fi
+  mount -t configfs configfs /sys/kernel/config 2>/dev/null
+  if [ -d /sys/kernel/config/usb_gadget ]; then
+    echo /sys/kernel/config
+    return 0
+  fi
+  mount -t configfs configfs /config 2>/dev/null
+  if [ -d /config/usb_gadget ]; then
+    echo /config
+    return 0
+  fi
+  echo ""
+  return 1
+}
+
+find_gadget() {
+  _cf="$(configfs_root)"
+  [ -n "$_cf" ] || return 1
+  _gdir="$_cf/usb_gadget"
+  _found=""
+  # prefer gadget with non-empty UDC
+  for g in "$_gdir"/*; do
+    [ -d "$g" ] || continue
+    case "$(basename "$g")" in .*) continue ;; esac
+    udc="$(sys_read "$g/UDC")"
+    if [ -n "$udc" ]; then
+      echo "$g"
+      return 0
+    fi
+    [ -z "$_found" ] && _found="$g"
+  done
+  if [ -n "$_found" ]; then
+    echo "$_found"
+    return 0
+  fi
+  # create our own gadget
+  mkdir -p "$_gdir/g_isodrive/configs/c.1/strings/0x409" 2>/dev/null
+  mkdir -p "$_gdir/g_isodrive/strings/0x409" 2>/dev/null
+  if [ -d "$_gdir/g_isodrive" ]; then
+    echo "$_gdir/g_isodrive"
+    return 0
+  fi
+  return 1
+}
+
+find_config() {
+  _g="$1"
+  for c in "$_g/configs"/*; do
+    [ -d "$c" ] || continue
+    case "$(basename "$c")" in .*) continue ;; esac
+    echo "$c"
+    return 0
+  done
+  mkdir -p "$_g/configs/c.1" 2>/dev/null
+  echo "$_g/configs/c.1"
+}
+
+list_udc() {
+  if [ -d /sys/class/udc ]; then
+    ls /sys/class/udc 2>/dev/null | head -1
+    return 0
+  fi
+  echo ""
+}
+
+android_usb_ok() {
+  [ -f /sys/class/android_usb/android0/enable ]
+}
+
+save_usb() {
+  {
+    echo "PROP_USB=$(getprop persist.sys.usb.config 2>/dev/null)"
+    echo "PROP_USB2=$(getprop sys.usb.config 2>/dev/null)"
+    echo "PROP_STATE=$(getprop sys.usb.state 2>/dev/null)"
+    if android_usb_ok; then
+      echo "A0_FUNC=$(sys_read /sys/class/android_usb/android0/functions)"
+      echo "A0_EN=$(sys_read /sys/class/android_usb/android0/enable)"
+    fi
+    _g="$(find_gadget 2>/dev/null)"
+    if [ -n "$_g" ]; then
+      echo "GADGET=$_g"
+      echo "UDC=$(sys_read "$_g/UDC")"
+    fi
+  } > "$USB_SAVE"
+}
+
+restore_usb() {
+  log "Restoring USB / unmounting LUN"
+  _bin="$(find_native 2>/dev/null)"
+  if [ -n "$_bin" ]; then
+    "$_bin" restore
+  fi
+  _g="$(find_gadget 2>/dev/null)"
+  if [ -n "$_g" ]; then
+    _udc="$(sys_read "$_g/UDC")"
+    sys_write "$_g/UDC" ""
+    _lun="$_g/functions/mass_storage.0/lun.0/file"
+    [ -e "$_lun" ] && sys_write "$_lun" ""
+    _cfg="$(find_config "$_g")"
+    [ -L "$_cfg/mass_storage.0" ] && rm -f "$_cfg/mass_storage.0"
+    # rebind original UDC if we had one
+    if [ -f "$USB_SAVE" ]; then
+      _oudc="$(grep '^UDC=' "$USB_SAVE" | head -1 | cut -d= -f2-)"
+      [ -n "$_oudc" ] && sys_write "$_g/UDC" "$_oudc"
+    elif [ -n "$_udc" ]; then
+      sys_write "$_g/UDC" "$_udc"
+    else
+      _nudc="$(list_udc)"
+      [ -n "$_nudc" ] && sys_write "$_g/UDC" "$_nudc"
+    fi
+  fi
+
+  if android_usb_ok; then
+    sys_write /sys/class/android_usb/android0/enable 0
+    if [ -f "$USB_SAVE" ]; then
+      _fn="$(grep '^A0_FUNC=' "$USB_SAVE" | cut -d= -f2-)"
+    fi
+    [ -z "$_fn" ] && _fn="mtp,adb"
+    sys_write /sys/class/android_usb/android0/functions "$_fn"
+    if [ -f /sys/class/android_usb/android0/f_mass_storage/lun/file ]; then
+      sys_write /sys/class/android_usb/android0/f_mass_storage/lun/file ""
+    fi
+    if [ -f /sys/class/android_usb/android0/f_mass_storage/lun0/file ]; then
+      sys_write /sys/class/android_usb/android0/f_mass_storage/lun0/file ""
+    fi
+    sys_write /sys/class/android_usb/android0/enable 1
+  fi
+
+  if [ -f "$USB_SAVE" ]; then
+    _p="$(grep '^PROP_USB2=' "$USB_SAVE" | cut -d= -f2-)"
+    [ -z "$_p" ] && _p="$(grep '^PROP_USB=' "$USB_SAVE" | cut -d= -f2-)"
+  fi
+  [ -z "$_p" ] && _p="adb,mtp"
+  # bounce vendor usb
+  setprop sys.usb.config none 2>/dev/null
+  sleep 0.3
+  setprop sys.usb.config "$_p" 2>/dev/null
+
+  rm -f "$STATE_FILE"
+  echo "unmounted"
+}
+
+# Resolve FUSE /sdcard path to something the kernel can open.
+# Order: realpath under /data/media, then bind/copy into STAGE_DIR.
+stage_file() {
+  _src="$1"
+  [ -f "$_src" ] || die "File not found: $_src"
+
+  # already in our stage / data
+  case "$_src" in
+    /data/adb/*|/data/local/*|/data/media/*)
+      # relabel for kernel
+      chcon u:object_r:system_data_file:s0 "$_src" 2>/dev/null
+      chmod a+r "$_src" 2>/dev/null
+      echo "$_src"
+      return 0
+      ;;
+  esac
+
+  _abs="$(readlink -f "$_src" 2>/dev/null || echo "$_src")"
+
+  # map /sdcard and /storage/emulated/0 → /data/media/0
+  _mapped=""
+  case "$_abs" in
+    /sdcard/*)
+      _mapped="/data/media/0/${_abs#/sdcard/}"
+      ;;
+    /storage/emulated/0/*)
+      _mapped="/data/media/0/${_abs#/storage/emulated/0/}"
+      ;;
+    /storage/self/primary/*)
+      _mapped="/data/media/0/${_abs#/storage/self/primary/}"
+      ;;
+    /mnt/sdcard/*)
+      _mapped="/data/media/0/${_abs#/mnt/sdcard/}"
+      ;;
+  esac
+  if [ -n "$_mapped" ] && [ -f "$_mapped" ]; then
+    chcon u:object_r:media_rw_data_file:s0 "$_mapped" 2>/dev/null
+    chmod a+r "$_mapped" 2>/dev/null
+    echo "$_mapped"
+    return 0
+  fi
+
+  # bind-mount into stage (cheap, no copy). Fallback: hardlink then copy.
+  _base="$(basename "$_abs")"
+  _dst="$STAGE_DIR/$_base"
+  rm -f "$_dst" 2>/dev/null
+  if ln "$_abs" "$_dst" 2>/dev/null; then
+    chcon u:object_r:system_data_file:s0 "$_dst" 2>/dev/null
+    echo "$_dst"
+    return 0
+  fi
+  # bind file
+  touch "$_dst" 2>/dev/null
+  if mount -o bind "$_abs" "$_dst" 2>/dev/null; then
+    chcon u:object_r:system_data_file:s0 "$_dst" 2>/dev/null
+    echo "$_dst"
+    return 0
+  fi
+  log "Bind/hardlink failed; copying (may take a while)..."
+  cp -f "$_abs" "$_dst" || die "Cannot stage file (SELinux/copy failed)"
+  chcon u:object_r:system_data_file:s0 "$_dst" 2>/dev/null
+  chmod 644 "$_dst"
+  echo "$_dst"
+}
+
+hexdump_at() {
+  # od -An -tx1 -N n -j off file
+  od -An -tx1 -N "$2" -j "$1" "$3" 2>/dev/null | tr -d ' \n'
+}
+
+is_hybrid() {
+  _h="$(hexdump_at 510 2 "$1")"
+  [ "$_h" = "55aa" ] || [ "$_h" = "55AA" ]
+}
+
+iso_label() {
+  # PVD at 32768, volume id at +40, 32 bytes
+  dd if="$1" bs=1 skip=32808 count=32 2>/dev/null | tr -d '\0' | sed 's/[[:space:]]*$//'
+}
+
+looks_windows() {
+  _l="$(iso_label "$1" | tr '[:lower:]' '[:upper:]')"
+  echo "$_l" | grep -q 'WIN\|CCCOMA\|ESD-ISO\|CPBA\|J_CCSA'
+}
+
+mount_configfs() {
+  _file="$1"; _cdrom="$2"; _ro="$3"; _usb3="$4"; _win="$5"
+  _g="$(find_gadget)" || die "No usb_gadget (kernel missing configfs mass storage?)"
+  _cfg="$(find_config "$_g")"
+  _udc="$(sys_read "$_g/UDC")"
+  [ -z "$_udc" ] && _udc="$(list_udc)"
+  [ -z "$_udc" ] && die "No UDC (USB device controller) found"
+
+  save_usb
+  sys_write "$_g/UDC" ""
+
+  _ms="$_g/functions/mass_storage.0"
+  mkdir -p "$_ms/lun.0" 2>/dev/null
+  if [ ! -d "$_ms" ]; then
+    # restore and fail
+    [ -n "$_udc" ] && sys_write "$_g/UDC" "$_udc"
+    die "Cannot create mass_storage.0 — CONFIG_USB_CONFIGFS_MASS_STORAGE is likely =n"
+  fi
+
+  sys_write "$_ms/stall" "0"
+  sys_write "$_ms/lun.0/file" ""
+  sys_write "$_ms/lun.0/cdrom" "$_cdrom"
+  sys_write "$_ms/lun.0/ro" "$_ro"
+  [ -e "$_ms/lun.0/removable" ] && sys_write "$_ms/lun.0/removable" "1"
+  [ -e "$_ms/lun.0/nofua" ] && sys_write "$_ms/lun.0/nofua" "1"
+
+  if [ "$_win" = "1" ]; then
+    sys_write "$_g/idVendor" "0x058f"
+    sys_write "$_g/idProduct" "0x6387"
+    if [ "$_usb3" = "1" ]; then
+      sys_write "$_g/bcdUSB" "0x0300"
+    else
+      sys_write "$_g/bcdUSB" "0x0200"
+    fi
+    mkdir -p "$_g/strings/0x409" 2>/dev/null
+    sys_write "$_g/strings/0x409/manufacturer" "Generic"
+    sys_write "$_g/strings/0x409/product" "USB CD-ROM Drive"
+    sys_write "$_g/strings/0x409/serialnumber" "000000000001"
+    [ -e "$_ms/lun.0/inquiry_string" ] && \
+      sys_write "$_ms/lun.0/inquiry_string" "Generic  USB CD-ROM       1.00"
+  fi
+
+  if [ ! -e "$_cfg/mass_storage.0" ]; then
+    ln -s "$_ms" "$_cfg/mass_storage.0" 2>/dev/null || \
+      ln -sf "$_ms" "$_cfg/mass_storage.0"
+  fi
+
+  # flags BEFORE file (nitanmarcel correctness)
+  sys_write "$_ms/lun.0/cdrom" "$_cdrom"
+  sys_write "$_ms/lun.0/ro" "$_ro"
+  if ! sys_write "$_ms/lun.0/file" "$_file"; then
+    sys_write "$_g/UDC" "$_udc"
+    die "Kernel rejected LUN file (SELinux or unreadable path): $_file"
+  fi
+
+  # verify kernel kept the path
+  _got="$(sys_read "$_ms/lun.0/file")"
+  if [ -z "$_got" ]; then
+    sys_write "$_g/UDC" "$_udc"
+    die "LUN file write ignored (classic enforcing denial). Check dmesg | grep avc"
+  fi
+
+  sys_write "$_g/UDC" "$_udc" || die "Failed to bind UDC $_udc"
+
+  {
+    echo "backend=configfs"
+    echo "gadget=$_g"
+    echo "file=$_file"
+    echo "cdrom=$_cdrom"
+    echo "ro=$_ro"
+    echo "udc=$_udc"
+  } > "$STATE_FILE"
+  log "Mounted (configfs) $_file cdrom=$_cdrom ro=$_ro udc=$_udc"
+}
+
+mount_sysfs() {
+  _file="$1"
+  android_usb_ok || die "android_usb sysfs not present"
+  save_usb
+  sys_write /sys/class/android_usb/android0/enable 0
+  _lun=""
+  for p in \
+    /sys/class/android_usb/android0/f_mass_storage/lun/file \
+    /sys/class/android_usb/android0/f_mass_storage/lun0/file \
+    /sys/devices/virtual/android_usb/android0/f_mass_storage/lun/file
+  do
+    [ -e "$p" ] && _lun="$p" && break
+  done
+  [ -n "$_lun" ] || die "No f_mass_storage lun/file on this kernel"
+  sys_write "$_lun" "$_file" || die "Failed to set lun file"
+  sys_write /sys/class/android_usb/android0/functions "mass_storage"
+  sys_write /sys/class/android_usb/android0/enable 1
+  {
+    echo "backend=sysfs"
+    echo "file=$_file"
+    echo "lun=$_lun"
+  } > "$STATE_FILE"
+  log "Mounted (sysfs) $_file"
+}
+
+cmd_probe() {
+  echo "uid=$(id -u)"
+  echo "selinux=$(getenforce 2>/dev/null || echo unknown)"
+  if [ -f /data/adb/modules/isodriveplus/common/probe_gadget.sh ]; then
+    # shellcheck disable=SC1091
+    . /data/adb/modules/isodriveplus/common/probe_gadget.sh
+    probe_gadget
+    echo "gadget_ok=$GADGET_OK"
+    echo "gadget_kconfig=$GADGET_KCONFIG"
+    echo "gadget_runtime=$GADGET_RUNTIME"
+    echo "gadget_detail=$GADGET_DETAIL"
+  fi
+  _cf="$(configfs_root)"
+  echo "configfs=${_cf:-none}"
+  if [ -n "$_cf" ]; then
+    echo "usb_gadget=yes"
+    echo "gadgets=$(ls "$_cf/usb_gadget" 2>/dev/null | tr '\n' ' ')"
+  else
+    echo "usb_gadget=no"
+  fi
+  echo "udc=$(list_udc)"
+  echo "android_usb=$(android_usb_ok && echo yes || echo no)"
+  _g="$(find_gadget 2>/dev/null)"
+  echo "active_gadget=${_g:-none}"
+  if [ -n "$_g" ]; then
+    echo "active_udc=$(sys_read "$_g/UDC")"
+  fi
+  _ms_ok=no
+  if [ -n "$_g" ]; then
+    mkdir -p "$_g/functions/mass_storage.0/lun.0" 2>/dev/null
+    [ -d "$_g/functions/mass_storage.0" ] && _ms_ok=yes
+  fi
+  echo "mass_storage=$_ms_ok"
+  _bin="$(find_native 2>/dev/null)"
+  echo "native_bin=${_bin:-MISSING}"
+  if [ -n "$_bin" ]; then
+    echo "native_file=$(file "$_bin" 2>/dev/null || ls -l "$_bin")"
+  fi
+  if [ -f /proc/config.gz ]; then
+    _k="$(zcat /proc/config.gz 2>/dev/null | grep 'CONFIG_USB_CONFIGFS_MASS_STORAGE')"
+    echo "kconfig=${_k:-unavailable}"
+  else
+    echo "kconfig=no_/proc/config.gz"
+  fi
+  if [ -f "$STATE_FILE" ]; then
+    echo "--- mounted ---"
+    cat "$STATE_FILE"
+  else
+    echo "mounted=no"
+  fi
+}
+
+find_native() {
+  for p in \
+    /data/adb/modules/isodriveplus/system/bin/isodrive.bin \
+    /data/adb/modules_update/isodriveplus/system/bin/isodrive.bin \
+    "$(dirname "$0")/isodrive.bin"
+  do
+    [ -x "$p" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+cmd_mount() {
+  _file=""; _extra=""
+  for a in "$@"; do
+    case "$a" in
+      -*) _extra="$_extra $a" ;;
+      *) [ -z "$_file" ] && _file="$a" ;;
+    esac
+  done
+  [ -n "$_file" ] || die "Usage: isodrive <file> [-cdrom|-hdd|-rw|-windows|-usb3]"
+  [ -f "$_file" ] || die "File not found: $_file"
+
+  _staged="$(stage_file "$_file")"
+  log "Staged path: $_staged (src=$_file)"
+  save_usb
+
+  _bin="$(find_native)"
+  if [ -n "$_bin" ]; then
+    log "Engine: kelexine isodrive ($_bin)"
+    # shellcheck disable=SC2086
+    "$_bin" "$_staged" $_extra
+    _rc=$?
+    {
+      echo "backend=kelexine"
+      echo "binary=$_bin"
+      echo "file=$_staged"
+      echo "src=$_file"
+      echo "args=$_extra"
+    } > "$STATE_FILE"
+    [ "$_rc" = "0" ] || die "kelexine isodrive failed (exit $_rc)"
+    log "Mounted via kelexine binary"
+    return 0
+  fi
+
+  log "WARNING: isodrive.bin missing, using shell fallback"
+  _cdrom=0; _ro=1; _usb3=0; _win=0; _hdd=0; _force=""
+  for a in "$@"; do
+    case "$a" in
+      -rw) _ro=0 ;;
+      -cdrom) _cdrom=1 ;;
+      -hdd) _hdd=1; _cdrom=0 ;;
+      -usb3) _usb3=1 ;;
+      -windows|-win10|-win11) _win=1; _cdrom=1; _ro=1 ;;
+      -configfs) _force=configfs ;;
+      -usbgadget|-sysfs) _force=sysfs ;;
+    esac
+  done
+  if [ "$_force" = "sysfs" ]; then
+    mount_sysfs "$_staged"
+  elif [ "$_force" = "configfs" ]; then
+    mount_configfs "$_staged" "$_cdrom" "$_ro" "$_usb3" "$_win"
+  elif [ -n "$(configfs_root)" ]; then
+    mount_configfs "$_staged" "$_cdrom" "$_ro" "$_usb3" "$_win"
+  elif android_usb_ok; then
+    mount_sysfs "$_staged"
+  else
+    die "No configfs usb_gadget and no android_usb sysfs"
+  fi
+}
+
+cmd_blank() {
+  # isodrive blank <name> <size_mb>
+  _name="${1:-blank.img}"
+  _mb="${2:-4096}"
+  _out="$IMG_DIR/$_name"
+  case "$_out" in
+    *.img|*.IMG) ;;
+    *) _out="${_out}.img" ;;
+  esac
+  log "Creating sparse ${_mb}MB image at $_out"
+  dd if=/dev/zero of="$_out" bs=1M count=0 seek="$_mb" 2>/dev/null || \
+    dd if=/dev/zero of="$_out" bs=1048576 count=0 seek="$_mb"
+  chcon u:object_r:system_data_file:s0 "$_out" 2>/dev/null
+  echo "$_out"
+}
+
+cmd_list() {
+  echo "# images in $IMG_DIR and common folders"
+  for d in "$IMG_DIR" /data/media/0/Download /data/media/0/ISO /data/media/0/Download/ISO /sdcard/Download /sdcard/ISO; do
+    [ -d "$d" ] || continue
+    find "$d" -maxdepth 2 -type f \( -iname '*.iso' -o -iname '*.img' -o -iname '*.bin' \) 2>/dev/null
+  done | sort -u
+}
+
+cmd_status() {
+  if [ -f "$STATE_FILE" ]; then
+    cat "$STATE_FILE"
+  else
+    echo "mounted=no"
+  fi
+  echo "selinux=$(getenforce 2>/dev/null)"
+}
+
+usage() {
+  cat <<'EOF'
+ISODrive+  —  mount an ISO/IMG as a USB disk/CD-ROM (root)
+
+  isodrive <FILE> [options]   Mount FILE as gadget LUN
+  isodrive                    Unmount + restore MTP/ADB (and show help)
+  isodrive umount|restore     Unmount + restore USB
+  isodrive probe              Kernel / gadget capability report
+  isodrive status             Current mount
+  isodrive list               Find ISO/IMG files
+  isodrive blank <name> <MB>  Create sparse blank disk under /data/adb/isodriveplus/images
+
+Options:
+  -cdrom      CD-ROM LUN (needed for official Windows ISOs)
+  -hdd        Force disk (disable auto-detect)
+  -rw         Read-write disk
+  -windows    Windows CD-ROM descriptors (also -win10 / -win11)
+  -usb3       bcdUSB 3.0
+  -configfs   Force configfs
+  -usbgadget  Force legacy android_usb sysfs
+
+SELinux: images are remapped to /data/media or staged under
+/data/adb/isodriveplus/stage so the kernel can open them while enforcing.
+EOF
+}
+
+need_root
+
+# refresh live policy if helper exists
+if [ -f /data/adb/modules/isodriveplus/common/sepolicy_live.sh ]; then
+  # shellcheck disable=SC1091
+  . /data/adb/modules/isodriveplus/common/sepolicy_live.sh
+  apply_live >/dev/null 2>&1
+fi
+
+if [ $# -eq 0 ]; then
+  usage
+  restore_usb
+  exit 0
+fi
+
+case "$1" in
+  -h|--help|help) usage ;;
+  probe) cmd_probe ;;
+  status) cmd_status ;;
+  list) cmd_list ;;
+  blank) shift; cmd_blank "$@" ;;
+  umount|unmount|restore) restore_usb ;;
+  *) cmd_mount "$@" ;;
+esac

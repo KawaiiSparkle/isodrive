@@ -1,0 +1,16 @@
+# built artifacts
+*.zip
+module/libs/*/isodrive
+module/libs/*/*.so
+
+# local NDK / build
+.cache/
+build/
+engine/build/
+*.o
+
+# editor
+.DS_Store
+*~
+.idea/
+.vscode/

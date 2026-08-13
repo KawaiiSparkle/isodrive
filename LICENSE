@@ -1,0 +1,10 @@
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ISODrive+ is a derivative work of isodrive by nitanmarcel (GPL-3.0)
+and improvements published by kelexine. The shell implementation in
+this tree is a compatible reimplementation of that behavior plus
+Magisk/KSU packaging and WebUI.
+
+You should have received a copy of the GNU GPL v3 with the upstream
+projects. Full text: https://www.gnu.org/licenses/gpl-3.0.txt

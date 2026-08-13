@@ -1,0 +1,8 @@
+ISODrive+ includes a modified copy of isodrive:
+
+  Copyright (C) Marcel Alexandru Nitan (nitanmarcel)
+  Copyright (C) kelexine
+  Licensed under GNU GPL v3.
+
+Modifications in engine/ (gadget create/bind, backing-file staging,
+LUN readback, restore, no default VID rewrite) are also GPL-3.0.

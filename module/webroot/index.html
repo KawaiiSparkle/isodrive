@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ISODrive+</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>ISODrive+</h1>
+      <p class="sub">手机当启动盘 · 无需 permissive</p>
+    </div>
+    <span id="selinux" class="pill">SELinux ?</span>
+  </header>
+
+  <section class="card" id="probe-card">
+    <h2>能力探测</h2>
+    <pre id="probe">正在探测…</pre>
+    <div class="row">
+      <button type="button" id="btn-probe">刷新探测</button>
+      <button type="button" class="ghost" id="btn-restore">卸载并恢复 MTP/ADB</button>
+    </div>
+    <p class="hint" id="cap-hint"></p>
+  </section>
+
+  <section class="card">
+    <h2>挂载镜像</h2>
+    <label>镜像路径
+      <input id="path" type="text" placeholder="/sdcard/Download/ubuntu.iso" autocomplete="off" />
+    </label>
+    <div class="modes">
+      <label><input type="radio" name="mode" value="auto" checked /> 自动</label>
+      <label><input type="radio" name="mode" value="cdrom" /> CD-ROM</label>
+      <label><input type="radio" name="mode" value="hdd" /> 硬盘</label>
+      <label><input type="radio" name="mode" value="windows" /> Windows ISO</label>
+    </div>
+    <label class="chk"><input type="checkbox" id="rw" /> 可写 (-rw，勿与 CD-ROM 同开)</label>
+    <label class="chk"><input type="checkbox" id="usb3" /> USB 3.0 描述符</label>
+    <div class="row">
+      <button type="button" id="btn-mount" class="primary">挂载</button>
+      <button type="button" class="ghost" id="btn-status">当前状态</button>
+    </div>
+    <pre id="out" class="out"></pre>
+  </section>
+
+  <section class="card">
+    <h2>本机镜像</h2>
+    <div class="row">
+      <button type="button" id="btn-list">扫描 Download / images</button>
+    </div>
+    <ul id="files"></ul>
+    <h3>新建空白盘</h3>
+    <div class="row">
+      <input id="blank-name" type="text" value="blank.img" />
+      <input id="blank-mb" type="number" value="4096" min="64" />
+      <button type="button" id="btn-blank">创建 MB</button>
+    </div>
+    <p class="hint">空白盘可挂成可写 HDD，给目标机当 U 盘或 persistence。</p>
+  </section>
+
+  <footer>
+    基于 nitanmarcel / kelexine ISODrive · GPL-3.0 · Android 6+ Magisk/KSU
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

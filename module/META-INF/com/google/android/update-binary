@@ -1,0 +1,42 @@
+#!/sbin/sh
+umask 022
+ui_print() { echo "$1"; }
+require_new_magisk() {
+  ui_print "*******************************"
+  ui_print " Please install Magisk v20.4+ "
+  ui_print " (or flash via KernelSU/APatch) "
+  ui_print "*******************************"
+  exit 1
+}
+OUTFD=$2
+ZIPFILE=$3
+mount /data 2>/dev/null
+if [ -f /data/adb/magisk/util_functions.sh ]; then
+  . /data/adb/magisk/util_functions.sh
+  [ "$MAGISK_VER_CODE" -lt 20400 ] && require_new_magisk
+  install_module
+  exit 0
+fi
+# KernelSU / APatch fallback installer
+MODID=isodriveplus
+if [ -d /data/adb/ksu ]; then
+  TARGET=/data/adb/modules/$MODID
+elif [ -d /data/adb/ap ]; then
+  TARGET=/data/adb/modules/$MODID
+else
+  require_new_magisk
+fi
+rm -rf "$TARGET"
+mkdir -p "$TARGET"
+unzip -o "$ZIPFILE" -d "$TARGET" >&2
+rm -rf "$TARGET/META-INF"
+export MODPATH="$TARGET"
+if [ -f "$TARGET/customize.sh" ]; then
+  # customize.sh calls abort() on unsupported kernels
+  sh "$TARGET/customize.sh" || {
+    rm -rf "$TARGET"
+    exit 1
+  }
+fi
+ui_print "- Installed to $TARGET"
+exit 0

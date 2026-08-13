@@ -1,0 +1,70 @@
+# ISODrive+ — allow gadget config + kernel read of staged/sdcard images
+# Magisk/KSU inject these at boot. Also re-applied live in post-fs-data.sh.
+
+# --- userspace (root managers) talking to configfs / sysfs ---
+allow magisk configfs:dir { add_name create getattr ioctl lock open read remove_name rmdir search setattr write }
+allow magisk configfs:file { create getattr ioctl lock open read setattr unlink write }
+allow magisk configfs:lnk_file { create getattr ioctl read setattr unlink write }
+allow su configfs:dir { add_name create getattr ioctl lock open read remove_name rmdir search setattr write }
+allow su configfs:file { create getattr ioctl lock open read setattr unlink write }
+allow su configfs:lnk_file { create getattr ioctl read setattr unlink write }
+allow toolbox configfs:dir { add_name create getattr open read remove_name search write }
+allow toolbox configfs:file { getattr open read write }
+allow toolbox configfs:lnk_file { create getattr read unlink }
+allow shell configfs:dir { add_name create getattr open read remove_name search write }
+allow shell configfs:file { getattr open read write }
+allow shell configfs:lnk_file { create getattr read unlink }
+
+allow magisk sysfs:file { getattr open read write }
+allow magisk sysfs:dir { search open read write add_name }
+allow su sysfs:file { getattr open read write }
+allow su sysfs:dir { search open read write add_name }
+allow magisk sysfs_usb:file { getattr open read write }
+allow su sysfs_usb:file { getattr open read write }
+
+# unlabeled configfs nodes on some OEM kernels
+allow magisk unlabeled:dir { add_name create getattr open read remove_name search write }
+allow magisk unlabeled:file { create getattr open read write unlink }
+allow magisk unlabeled:lnk_file { create getattr read unlink }
+allow su unlabeled:dir { add_name create getattr open read remove_name search write }
+allow su unlabeled:file { create getattr open read write unlink }
+allow su unlabeled:lnk_file { create getattr read unlink }
+
+# --- kernel opening LUN backing files (this is why people set permissive) ---
+allow kernel fuse:file { getattr open read write ioctl lock }
+allow kernel fuse:dir { search getattr }
+allow kernel sdcardfs:file { getattr open read write ioctl lock }
+allow kernel sdcardfs:dir { search getattr }
+allow kernel fuseblk:file { getattr open read write ioctl }
+allow kernel media_rw_data_file:file { getattr open read write ioctl lock }
+allow kernel media_rw_data_file:dir { search getattr }
+allow kernel fuse_device:chr_file { read write open ioctl getattr }
+allow kernel system_data_file:file { getattr open read write ioctl lock }
+allow kernel system_data_file:dir { search getattr }
+allow kernel unlabeled:file { getattr open read write ioctl lock }
+allow kernel unlabeled:dir { search getattr }
+allow kernel app_data_file:file { getattr open read write }
+allow kernel privapp_data_file:file { getattr open read write }
+allow kernel sdcard_posix:file { getattr open read write ioctl }
+allow kernel sdcard_posix:dir { search getattr }
+allow kernel tmpfs:file { getattr open read write }
+allow kernel tmpfs:dir { search }
+
+# kernel must follow bind mounts / block devices
+allow kernel block_device:blk_file { getattr open read write ioctl }
+allow kernel loop_device:blk_file { getattr open read write ioctl }
+
+# magisk/su reading images to stage them
+allow magisk fuse:file { getattr open read write ioctl }
+allow magisk sdcardfs:file { getattr open read write ioctl }
+allow magisk media_rw_data_file:file { getattr open read write ioctl }
+allow magisk media_rw_data_file:dir { search getattr open read write add_name }
+allow su fuse:file { getattr open read write ioctl }
+allow su sdcardfs:file { getattr open read write ioctl }
+allow su media_rw_data_file:file { getattr open read write ioctl }
+allow su media_rw_data_file:dir { search getattr open read write add_name }
+
+# persist properties for USB restore
+allow magisk property_socket:sock_file write
+allow magisk init:unix_stream_socket connectto
+allow su property_socket:sock_file write
