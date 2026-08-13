@@ -72,6 +72,11 @@
       <input id="ventoy-iso" type="text" placeholder="要拷进盘的 /path/to.iso" />
       <button type="button" id="btn-ventoy-add">拷进 Ventoy</button>
     </div>
+    <h3>UDF / 官方 ISO → FAT32 或 exFAT</h3>
+    <p class="hint">解析 UDF（没有则走 ISO9660/Joliet），把文件写进磁盘镜像。单文件 &lt; 4GiB 用 FAT32，否则 exFAT。不要直接挂 UDF 给主机。</p>
+    <div class="row">
+      <button type="button" id="btn-convert">转换当前路径</button>
+    </div>
   </section>
 
   <section class="card">

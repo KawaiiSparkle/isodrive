@@ -6,3 +6,6 @@ ISODrive+ includes a modified copy of isodrive:
 
 Modifications in engine/ (gadget create/bind, backing-file staging,
 LUN readback, restore, no default VID rewrite) are also GPL-3.0.
+
+engine/third_party/fatfs is FatFs by ChaN (1-clause BSD-style).
+engine/udf is the ISODrive+ UDF/ISO9660 reader + udf2disk converter (GPL-3.0).

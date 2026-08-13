@@ -13,7 +13,7 @@ if ! command -v abort >/dev/null 2>&1; then
 fi
 
 ui_print "******************************"
-ui_print " ISODrive+ 1.2.0"
+ui_print " ISODrive+ 1.4.0"
 ui_print " USB gadget ISO/IMG (A6+)"
 ui_print "******************************"
 ui_print "- Probing kernel USB gadget mass storage..."
@@ -77,6 +77,11 @@ fi
 mkdir -p "$MODPATH/system/bin"
 cp -f "$MODPATH/libs/$ABI/isodrive" "$MODPATH/system/bin/isodrive.bin"
 chmod 755 "$MODPATH/system/bin/isodrive.bin"
+if [ -f "$MODPATH/libs/$ABI/udf2disk" ]; then
+  cp -f "$MODPATH/libs/$ABI/udf2disk" "$MODPATH/system/bin/udf2disk"
+  chmod 755 "$MODPATH/system/bin/udf2disk"
+  ui_print "- udf2disk [$ABI] (UDF → FAT32/exFAT)"
+fi
 chmod 755 "$MODPATH/system/bin/isodrive"
 rm -rf "$MODPATH/libs"
 ui_print "- kelexine isodrive.bin [$ABI] installed"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cross-compile engine/ (kelexine + ISODrive+ P0) for Android 6+ (API 23).
+# Cross-compile engine + udf2disk for Android 6+ (API 23).
 set -e
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/engine"
@@ -19,15 +19,35 @@ compile() {
   abi=$1; triple=$2; api=$3
   dest="$OUT/$abi"
   mkdir -p "$dest"
-  echo "=== $abi api$api ==="
-  "$PRE/${triple}${api}-clang++" -std=c++17 -O2 -fPIE -pie -static-libstdc++ \
+  cxx="$PRE/${triple}${api}-clang++"
+  cc="$PRE/${triple}${api}-clang"
+  echo "=== $abi api$api isodrive ==="
+  "$cxx" -std=c++17 -O2 -fPIE -pie -static-libstdc++ \
     -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -I"$SRC/src/include" \
     "$SRC/src/main.cpp" "$SRC/src/util.cpp" "$SRC/src/logger.cpp" \
     "$SRC/src/configfsisomanager.cpp" "$SRC/src/androidusbisomanager.cpp" \
     -o "$dest/isodrive"
   "$PRE/llvm-strip" "$dest/isodrive"
-  file "$dest/isodrive"
+
+  echo "=== $abi api$api udf2disk ==="
+  obj="$dest/obj"
+  mkdir -p "$obj"
+  "$cc" -x c -std=c11 -O2 -fPIC -D_FILE_OFFSET_BITS=64 -I"$SRC/third_party/fatfs" \
+    -c "$SRC/third_party/fatfs/ff.c" -o "$obj/ff.o"
+  "$cc" -x c -std=c11 -O2 -fPIC -D_FILE_OFFSET_BITS=64 -I"$SRC/third_party/fatfs" \
+    -c "$SRC/third_party/fatfs/ffunicode.c" -o "$obj/ffunicode.o"
+  "$cc" -x c -std=c11 -O2 -fPIC -D_FILE_OFFSET_BITS=64 -I"$SRC/third_party/fatfs" \
+    -c "$SRC/third_party/fatfs/diskio_file.c" -o "$obj/diskio.o"
+  "$cxx" -std=c++17 -O2 -fPIE -pie -static-libstdc++ -D_FILE_OFFSET_BITS=64 \
+    -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -I"$SRC/udf" -I"$SRC/third_party/fatfs" \
+    "$SRC/udf/udf2disk.cpp" "$SRC/udf/udf.cpp" \
+    "$obj/ff.o" "$obj/ffunicode.o" "$obj/diskio.o" \
+    -o "$dest/udf2disk"
+  rm -rf "$obj"
+  "$PRE/llvm-strip" "$dest/udf2disk"
+  file "$dest/isodrive" "$dest/udf2disk"
 }
 
 rm -rf "$OUT"

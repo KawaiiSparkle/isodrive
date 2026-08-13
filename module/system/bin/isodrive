@@ -583,6 +583,7 @@ ISODrive+  —  mount an ISO/IMG as a USB disk/CD-ROM (root)
   isodrive status             Current mount
   isodrive list                 Scan ISO/IMG (custom paths)
   isodrive paths / paths-add P / paths-del P
+  isodrive convert <iso> [out.img]  UDF/ISO → FAT32(<4GiB files) or exFAT
   isodrive ventoy-init [img] [GB]   Build Ventoy disk image (multi-ISO)
   isodrive ventoy-add <img> <iso>   Copy ISO into Ventoy data partition
   isodrive diag                     LUN + last AVC denials
@@ -628,6 +629,16 @@ case "$1" in
   paths-add) shift; cmd_paths add "$@" ;;
   paths-del) shift; cmd_paths del "$@" ;;
   cfg|config) shift; cmd_cfg "$@" ;;
+  convert|udf2disk)
+    shift
+    _u=""
+    for p in /data/adb/modules/isodriveplus/system/bin/udf2disk "$(dirname "$0")/udf2disk"; do
+      [ -x "$p" ] && _u="$p" && break
+    done
+    [ -n "$_u" ] || die "udf2disk binary missing"
+    mkdir -p /data/adb/isodriveplus/images
+    "$_u" "$@"
+    ;;
   ventoy-init) _load_cfg; shift; ventoy_init "$@" ;;
   ventoy-add) _load_cfg; shift; ventoy_add "$@" ;;
   blank) shift; cmd_blank "$@" ;;

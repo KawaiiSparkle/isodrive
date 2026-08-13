@@ -115,6 +115,20 @@
       document.querySelector('input[name=mode][value=ventoy]').checked = true;
     }
   };
+  $("btn-convert").onclick = async () => {
+    const iso = $("path").value.trim();
+    if (!iso) { $("out").textContent = "先填 ISO 路径"; return; }
+    $("out").textContent = "正在解包 UDF 并写入 FAT/exFAT（大 ISO 会很久）…";
+    const r = await sh("isodrive convert " + q(iso));
+    out($("out"), r);
+    const lines = (r.stdout || "").trim().split("\n");
+    const last = lines[lines.length - 1] || "";
+    if (r.code === 0 && last.indexOf("/") === 0) {
+      $("path").value = last;
+      document.querySelector('input[name=mode][value=hdd]').checked = true;
+      $("rw").checked = true;
+    }
+  };
   $("btn-ventoy-add").onclick = async () => {
     const img = $("ventoy-out").value.trim();
     const iso = $("ventoy-iso").value.trim() || $("path").value.trim();
