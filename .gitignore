@@ -17,3 +17,4 @@ engine/build/
 
 # SSH keys — never commit private key
 keys/
+upstream/
