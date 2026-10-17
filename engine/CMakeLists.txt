@@ -11,4 +11,5 @@ add_executable(isodrive
     src/logger.cpp
     src/configfsisomanager.cpp
     src/androidusbisomanager.cpp
+    src/uiserver.cpp
 )

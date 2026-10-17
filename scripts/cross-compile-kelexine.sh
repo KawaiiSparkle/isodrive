@@ -11,8 +11,25 @@ elif [ -n "$ANDROID_NDK_ROOT" ]; then
 else
   NDK="$HOME/.cache/android-ndk-r26d"
 fi
-PRE="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
-[ -x "$PRE/clang++" ] || { echo "NDK clang++ not found under $NDK"; exit 1; }
+case "$(uname -s)" in
+  Linux*) HOST_TAG=linux-x86_64 ;;
+  Darwin*) HOST_TAG=darwin-x86_64 ;;
+  MINGW*|MSYS*|CYGWIN*) HOST_TAG=windows-x86_64 ;;
+  *) HOST_TAG=linux-x86_64 ;;
+esac
+PRE="$NDK/toolchains/llvm/prebuilt/$HOST_TAG/bin"
+if [ ! -f "$PRE/clang++" ] && [ ! -f "$PRE/clang++.exe" ]; then
+  for alt in linux-x86_64 darwin-x86_64 windows-x86_64; do
+    if [ -f "$NDK/toolchains/llvm/prebuilt/$alt/bin/clang++" ]; then
+      HOST_TAG="$alt"
+      PRE="$NDK/toolchains/llvm/prebuilt/$alt/bin"
+      break
+    fi
+  done
+fi
+[ -f "$PRE/clang++" ] || [ -f "$PRE/clang++.exe" ] || { echo "NDK clang++ not found under $NDK"; exit 1; }
+STRIP="$PRE/llvm-strip"
+if [ ! -f "$STRIP" ] && [ -f "$STRIP.exe" ]; then STRIP="$STRIP.exe"; fi
 [ -f "$SRC/src/main.cpp" ] || { echo "engine sources missing at $SRC"; exit 1; }
 
 compile() {
@@ -27,8 +44,9 @@ compile() {
     -I"$SRC/src/include" \
     "$SRC/src/main.cpp" "$SRC/src/util.cpp" "$SRC/src/logger.cpp" \
     "$SRC/src/configfsisomanager.cpp" "$SRC/src/androidusbisomanager.cpp" \
+    "$SRC/src/uiserver.cpp" \
     -o "$dest/isodrive"
-  "$PRE/llvm-strip" "$dest/isodrive"
+  "$STRIP" "$dest/isodrive"
 
   echo "=== $abi api$api udf2disk ==="
   obj="$dest/obj"
@@ -46,7 +64,7 @@ compile() {
     "$obj/ff.o" "$obj/ffunicode.o" "$obj/diskio.o" \
     -o "$dest/udf2disk"
   rm -rf "$obj"
-  "$PRE/llvm-strip" "$dest/udf2disk"
+  "$STRIP" "$dest/udf2disk"
   file "$dest/isodrive" "$dest/udf2disk"
 }
 

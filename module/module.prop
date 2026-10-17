@@ -1,7 +1,7 @@
 id=isodriveplus
 name=ISODrive+
-version=1.4.0
-versionCode=140
+version=1.5.0
+versionCode=150
 author=ISODrive+ / nitanmarcel / kelexine
-description=USB gadget ISO/IMG boot drive for Android 6+. WebUI + CLI. Enforcing SELinux via sepolicy + image staging. Magisk / KernelSU / APatch.
+description=USB gadget ISO/IMG boot drive for Android 6+. Universal WebUI (KernelSU/APatch/MMRL WebView + browser via built-in loopback server) + CLI. Enforcing SELinux via sepolicy + image staging. Magisk / KernelSU / APatch.
 updateJson=

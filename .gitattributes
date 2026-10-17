@@ -1,0 +1,10 @@
+# Keep module scripts LF even on Windows checkouts: CRLF breaks Android sh
+# and the Magisk module zip.
+* text=auto
+module/** text eol=lf
+engine/src/** text eol=lf
+engine/third_party/** -text
+scripts/** text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.md text eol=lf

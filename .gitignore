@@ -1,6 +1,7 @@
 # built artifacts
 *.zip
 module/libs/*/isodrive
+module/libs/*/udf2disk
 module/libs/*/*.so
 
 # local NDK / build

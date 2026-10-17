@@ -24,6 +24,18 @@ jobs:
           ndk-version: r26d
           add-to-path: false
 
+      - name: Syntax-check scripts and WebUI JS
+        run: |
+          set -e
+          for f in module/system/bin/isodrive module/common/*.sh module/*.sh; do
+            echo "sh -n $f"
+            sh -n "$f"
+          done
+          for f in module/webroot/*.js; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
       - name: Cross-compile engine (4 ABIs, API 23)
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}

@@ -13,7 +13,13 @@ USB_SAVE="$STATE_DIR/usb.save"
 
 mkdir -p "$STATE_DIR" "$STAGE_DIR" "$IMG_DIR" 2>/dev/null
 
-log() { echo "[isodrive] $*" | tee -a "$LOG_FILE" 2>/dev/null; }
+log() {
+  if [ "$UI_JSON" = "1" ]; then
+    echo "[isodrive] $*" >> "$LOG_FILE" 2>/dev/null
+  else
+    echo "[isodrive] $*" | tee -a "$LOG_FILE" 2>/dev/null
+  fi
+}
 err() { echo "[isodrive] ERROR: $*" | tee -a "$LOG_FILE" 2>/dev/null >&2; }
 
 die() { err "$*"; exit 1; }
@@ -589,6 +595,10 @@ ISODrive+  —  mount an ISO/IMG as a USB disk/CD-ROM (root)
   isodrive diag                     LUN + last AVC denials
   isodrive cfg [persist 0|1] [autorestore 0|1]
   isodrive blank <name> <MB>        Sparse raw disk (not UDF; prefer Ventoy)
+  isodrive ui                       Interactive menu / UI JSON API
+  isodrive ui start [--human]       Local WebUI server + open browser
+  isodrive ui stop                  Stop the local WebUI server
+  isodrive ui env|status|images     JSON state for the graphical panel
 
 Options:
   -cdrom      CD-ROM LUN (needed for official Windows ISOs)
@@ -612,6 +622,15 @@ if [ -f /data/adb/modules/isodriveplus/common/sepolicy_live.sh ]; then
   . /data/adb/modules/isodriveplus/common/sepolicy_live.sh
   apply_live >/dev/null 2>&1
 fi
+
+# UI API library (JSON commands + local server + TUI menu)
+for _uidir in "$(dirname "$0")/../../common/ui.sh" /data/adb/modules/isodriveplus/common/ui.sh /data/adb/modules_update/isodriveplus/common/ui.sh; do
+  if [ -f "$_uidir" ]; then
+    # shellcheck disable=SC1091
+    . "$_uidir"
+    break
+  fi
+done
 
 if [ $# -eq 0 ]; then
   usage
@@ -643,5 +662,6 @@ case "$1" in
   ventoy-add) _load_cfg; shift; ventoy_add "$@" ;;
   blank) shift; cmd_blank "$@" ;;
   umount|unmount|restore) restore_usb ;;
+  ui) shift; UI_JSON=1; ui_dispatch "$@" ;;
   *) cmd_mount "$@" ;;
 esac

@@ -13,7 +13,7 @@ if ! command -v abort >/dev/null 2>&1; then
 fi
 
 ui_print "******************************"
-ui_print " ISODrive+ 1.4.0"
+ui_print " ISODrive+ 1.5.0"
 ui_print " USB gadget ISO/IMG (A6+)"
 ui_print "******************************"
 ui_print "- Probing kernel USB gadget mass storage..."
@@ -89,7 +89,8 @@ ui_print "- 已安装 kelexine 原生二进制 [$ABI]"
 
 chmod 755 "$MODPATH/common/sepolicy_live.sh" 2>/dev/null
 chmod 755 "$MODPATH/common/probe_gadget.sh" 2>/dev/null
-chmod 755 "$MODPATH/common/config.sh" "$MODPATH/common/ventoy.sh" 2>/dev/null
+chmod 755 "$MODPATH/common/config.sh" "$MODPATH/common/ventoy.sh" "$MODPATH/common/ui.sh" 2>/dev/null
+chmod 755 "$MODPATH/action.sh" 2>/dev/null
 
 mkdir -p /data/adb/isodriveplus/images /data/adb/isodriveplus/stage
 chmod 755 /data/adb/isodriveplus /data/adb/isodriveplus/images /data/adb/isodriveplus/stage
@@ -102,5 +103,6 @@ fi
 
 ui_print "- Supported / 设备支持 mass_storage gadget"
 ui_print "- CLI: su -c isodrive"
-ui_print "- WebUI: Magisk/KSU/MMRL → ISODrive+"
+ui_print "- WebUI: KernelSU / APatch / MMRL → open the module page"
+ui_print "- Pure Magisk: tap the module Action button → browser UI"
 ui_print "- Reboot once for sepolicy.rule / 请重启一次以加载策略"

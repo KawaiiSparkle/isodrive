@@ -37,6 +37,16 @@ apply_live() {
     live "allow $src unlabeled file { create getattr open read write unlink }"
   done
 
+  # loopback TCP: the local WebUI server runs in magisk/su domain.
+  # Port-type names differ between Android releases; unknown ones are skipped.
+  for src in magisk su; do
+    live "allow $src self:tcp_socket { create bind listen accept connect read write getattr setopt ioctl shutdown }"
+    live "allow $src unlabeled:tcp_socket { name_bind name_connect }"
+    for _p in port_t unreserved_port_t ephemeral_port_t http_port_t; do
+      live "allow $src $_p:tcp_socket { name_bind name_connect }"
+    done
+  done
+
   for t in fuse sdcardfs fuseblk media_rw_data_file system_data_file unlabeled app_data_file sdcard_posix tmpfs; do
     live "allow kernel $t file { getattr open read write ioctl lock }"
     live "allow kernel $t dir { search getattr }"

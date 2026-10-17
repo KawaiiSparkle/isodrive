@@ -1,94 +1,40 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>ISODrive+</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="referrer" content="no-referrer">
+<title>ISODrive+</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <div>
-      <h1>ISODrive+</h1>
-      <p class="sub">Ventoy 多 ISO · 无需 permissive</p>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">◈</div>
+      <div class="brand-text">
+        <h1>ISODrive+</h1>
+        <p class="sub">手机 → USB 启动盘 / CD-ROM</p>
+      </div>
     </div>
-    <span id="selinux" class="pill">SELinux ?</span>
+    <div class="pills">
+      <span id="pill-conn" class="pill">连接中</span>
+      <span id="pill-selinux" class="pill">SELinux</span>
+    </div>
   </header>
-
-  <section class="card" id="probe-card">
-    <h2>能力探测</h2>
-    <pre id="probe">正在探测…</pre>
-    <div class="row">
-      <button type="button" id="btn-probe">刷新探测</button>
-      <button type="button" class="ghost" id="btn-restore">卸载并恢复 MTP/ADB</button>
-      <button type="button" class="ghost" id="btn-diag">诊断 AVC/LUN</button>
-    </div>
-    <p class="hint" id="cap-hint"></p>
-  </section>
-
-  <section class="card">
-    <h2>挂载</h2>
-    <label>路径（单 ISO / Ventoy 盘镜像）
-      <input id="path" type="text" placeholder="/sdcard/Download/ubuntu.iso 或 ventoy.img" autocomplete="off" />
-    </label>
-    <div class="modes">
-      <label><input type="radio" name="mode" value="auto" checked /> 自动</label>
-      <label><input type="radio" name="mode" value="cdrom" /> CD-ROM</label>
-      <label><input type="radio" name="mode" value="hdd" /> 硬盘</label>
-      <label><input type="radio" name="mode" value="windows" /> Windows ISO</label>
-      <label><input type="radio" name="mode" value="ventoy" /> Ventoy 盘</label>
-    </div>
-    <label class="chk"><input type="checkbox" id="rw" /> 可写 (-rw)</label>
-    <label class="chk"><input type="checkbox" id="usb3" /> USB 3.0 描述符</label>
-    <div class="row">
-      <button type="button" id="btn-mount" class="primary">挂载 / 热换</button>
-      <button type="button" class="ghost" id="btn-status">状态</button>
-    </div>
-    <pre id="out" class="out"></pre>
-  </section>
-
-  <section class="card">
-    <h2>镜像库（自定义路径）</h2>
-    <div class="row">
-      <button type="button" id="btn-list">扫描</button>
-    </div>
-    <ul id="files"></ul>
-    <div class="row">
-      <input id="new-path" type="text" placeholder="/sdcard/MyISOs" />
-      <button type="button" id="btn-path-add">添加路径</button>
-    </div>
-    <pre id="paths" class="out"></pre>
-  </section>
-
-  <section class="card">
-    <h2>Ventoy 盘（推荐多 ISO）</h2>
-    <p class="hint">不做 UDF 刻录。生成官方 Ventoy 磁盘镜像，ISO 丢进数据分区，BIOS 里选 Ventoy 再选系统。</p>
-    <div class="row">
-      <input id="ventoy-out" type="text" value="/data/adb/isodriveplus/images/ventoy.img" />
-      <input id="ventoy-gb" type="number" value="16" min="4" />
-      <button type="button" id="btn-ventoy">创建 GB</button>
-    </div>
-    <div class="row">
-      <input id="ventoy-iso" type="text" placeholder="要拷进盘的 /path/to.iso" />
-      <button type="button" id="btn-ventoy-add">拷进 Ventoy</button>
-    </div>
-    <h3>UDF / 官方 ISO → FAT32 或 exFAT</h3>
-    <p class="hint">解析 UDF（没有则走 ISO9660/Joliet），把文件写进磁盘镜像。单文件 &lt; 4GiB 用 FAT32，否则 exFAT。不要直接挂 UDF 给主机。</p>
-    <div class="row">
-      <button type="button" id="btn-convert">转换当前路径</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>开机 / 拔线</h2>
-    <label class="chk"><input type="checkbox" id="persist" /> 开机自动挂上次（PERSIST_MOUNT）</label>
-    <label class="chk"><input type="checkbox" id="autorestore" checked /> 拔线后恢复 MTP（AUTO_RESTORE）</label>
-    <div class="row">
-      <button type="button" id="btn-cfg-save">保存</button>
-    </div>
-  </section>
-
-  <footer>ISODrive+ · kelexine engine · GPL-3.0 · Android 6+</footer>
-  <script src="app.js"></script>
+  <div id="banner-none" class="banner hidden"></div>
+  <main id="view" class="view"></main>
+  <nav class="tabbar" id="tabbar">
+    <button type="button" class="tab" data-act="tab" data-tab="home"><span class="ico">◉</span><span>概览</span></button>
+    <button type="button" class="tab" data-act="tab" data-tab="images"><span class="ico">▤</span><span>镜像</span></button>
+    <button type="button" class="tab" data-act="tab" data-tab="tools"><span class="ico">⚙</span><span>工具</span></button>
+    <button type="button" class="tab" data-act="tab" data-tab="settings"><span class="ico">☰</span><span>设置</span></button>
+  </nav>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root"></div>
+<script src="bridge.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

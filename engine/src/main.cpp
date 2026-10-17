@@ -1,6 +1,7 @@
 #include "androidusbisomanager.h"
 #include "configfsisomanager.h"
 #include "logger.h"
+#include "uiserver.h"
 #include "util.h"
 #include <iostream>
 #include <string>
@@ -13,7 +14,9 @@ void print_help() {
       "  isodrive <FILE> [options]   Mount FILE as USB disk/CD-ROM\n"
       "  isodrive                    Unmount + restore gadget\n"
       "  isodrive restore            Unmount + restore gadget\n"
-      "  isodrive probe              Print gadget/UDC capability\n\n"
+      "  isodrive probe              Print gadget/UDC capability\n"
+      "  isodrive serve --root DIR --cli PATH\n"
+      "                              Internal loopback WebUI server\n\n"
       "Options:\n"
       "  -rw            Read-write disk\n"
       "  -cdrom         CD-ROM LUN (official Windows ISOs)\n"
@@ -55,6 +58,10 @@ int main(int argc, char *argv[]) {
   if (getuid() != 0) {
     std::cerr << "Permission denied\n";
     return 1;
+  }
+
+  if (argc >= 2 && std::string(argv[1]) == "serve") {
+    return isodrive_ui_server_main(argc - 1, argv + 1);
   }
 
   std::string iso_target;

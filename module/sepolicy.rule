@@ -68,3 +68,9 @@ allow su media_rw_data_file:dir { search getattr open read write add_name }
 allow magisk property_socket:sock_file write
 allow magisk init:unix_stream_socket connectto
 allow su property_socket:sock_file write
+
+# --- loopback TCP for the built-in WebUI server (browser mode on pure Magisk) ---
+allow magisk self:tcp_socket { create bind listen accept connect read write getattr setopt ioctl shutdown }
+allow su self:tcp_socket { create bind listen accept connect read write getattr setopt ioctl shutdown }
+allow magisk unlabeled:tcp_socket { name_bind name_connect }
+allow su unlabeled:tcp_socket { name_bind name_connect }
